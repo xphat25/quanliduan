@@ -1,10 +1,9 @@
-// file: api.php
-
 <?php
-// Đặt header để báo cho trình duyệt biết kết quả trả về là JSON
+// file: api.php
+// Lưu ý: Không để bất kỳ ký tự nào trước thẻ <?php ở dòng 1
+
 header('Content-Type: application/json; charset=utf-8');
 
-// 1. Lấy URL từ tham số gửi lên
 $url = isset($_GET['url']) ? $_GET['url'] : '';
 
 if (empty($url)) {
@@ -12,23 +11,30 @@ if (empty($url)) {
     exit;
 }
 
-// --- FIX LỖI CHARMAP TRÊN WINDOWS ---
-// Thiết lập biến môi trường để Python in ra UTF-8 thay vì encoding mặc định của Windows
 putenv("PYTHONIOENCODING=utf-8");
 
-// 2. Cấu hình lệnh chạy Python trên Linux (aaPanel)
-// ĐÃ SỬA: Loại bỏ " 2>&1" để chỉ nhận output JSON (stdout), không nhận log/lỗi (stderr).
+// Thêm cờ 2>&1 vào biến lệnh nếu bạn muốn DEBUG lỗi Python (kết quả lỗi sẽ hiện trong JSON response)
+// Nhưng để chạy sản phẩm (Production), ta chỉ cần output chuẩn.
 $command = "python3 scraper.py " . escapeshellarg($url);
 
-// 3. Thực thi lệnh
 $output = shell_exec($command);
 
-// 4. Kiểm tra kết quả
 if ($output === null) {
-    echo json_encode(["error" => "Lỗi Server: Không thể gọi lệnh Python (Hàm shell_exec có thể bị tắt)."]);
+    echo json_encode(["error" => "Lỗi Server: Không thể gọi lệnh Python."]);
 } else {
-    // Trả về nguyên văn những gì Python in ra (JSON)
-    // Nếu Python chạy lỗi, nó sẽ in ra JSON chứa {"error":...}
-    echo $output;
+    // Lọc bỏ các dòng trống hoặc log thừa nếu vẫn còn sót
+    $output = trim($output);
+    
+    // Kiểm tra xem output có phải là JSON không trước khi trả về
+    json_decode($output);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        // Nếu output không phải JSON thuần (do dính log), trả về lỗi để dễ debug
+        echo json_encode([
+            "error" => "Invalid JSON Output from Python",
+            "raw_output" => $output
+        ]);
+    } else {
+        echo $output;
+    }
 }
 ?>

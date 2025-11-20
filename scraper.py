@@ -1,12 +1,22 @@
 # file: scraper.py
 
-# scraper.py - Scraper sử dụng Selenium và Regex để lấy danh sách sản phẩm
+import os
+# --- 1. QUAN TRỌNG: TẮT LOG CỦA WEBDRIVER MANAGER ---
+# Phải đặt dòng này TRƯỚC KHI import bất kỳ thứ gì khác liên quan đến selenium/webdriver
+os.environ['WDM_LOG'] = '0'
+os.environ['WDM_PRINT_FIRST_LINE'] = 'False'
+
 import sys
 import io
 import json
 import re 
 import logging
 from urllib.parse import urlparse, urljoin
+
+# --- CẤU HÌNH LOGGING ---
+# Chỉ in log ra STDERR để không làm hỏng dữ liệu JSON ở STDOUT
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -22,8 +32,9 @@ REQUEST_TIMEOUT = 30
 WAIT_TIME = 10
 
 # --- XỬ LÝ ENCODING CHO WINDOWS ---
-# Ép buộc stdout/stderr dùng UTF-8 để không bị lỗi 'charmap' khi in tiếng Việt
+# Ép buộc stdout dùng UTF-8 để in JSON tiếng Việt không lỗi
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+# Stderr cũng dùng UTF-8 để in log
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 def get_driver():
@@ -33,16 +44,19 @@ def get_driver():
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-    # Tắt bớt log rác của Selenium
+    
+    # Tắt bớt log rác của bản thân trình duyệt Chrome
     chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
     
     try:
+        # Cài đặt driver (Log của lệnh này đã bị chặn bởi os.environ ở trên)
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.set_page_load_timeout(REQUEST_TIMEOUT)
         return driver
     except WebDriverException as e:
-        # Trả về lỗi dưới dạng JSON để PHP bắt được
+        # In lỗi ra stderr để debug, và in JSON lỗi ra stdout để PHP bắt được
+        logging.error(f"Driver Init Error: {str(e)}")
         print(json.dumps({"error": f"Driver Error: {str(e)}"}))
         sys.exit(1)
 
@@ -62,7 +76,7 @@ def scrape_page(url):
     để lấy hình ảnh và link chuẩn xác. 
     """
     logging.info(f"=" * 70)
-    logging.info(f"Starting Hybrid Scrape (Regex for Price + BS for Image/Link): {url}")
+    logging.info(f"Starting Hybrid Scrape: {url}")
     logging.info(f"=" * 70)
     
     driver = None
@@ -92,10 +106,9 @@ def scrape_page(url):
              pattern = r"(Combo.*?)\s+([\d]{3,}(?:\.[\d]{3})*đ)\s+([\d]{3,}(?:\.[\d]{3})*đ)"
              matches = re.findall(pattern, body_text, re.MULTILINE)
 
-        logging.info(f"Tìm thấy {len(matches)} combo khuyến mãi bằng Regex.")
+        logging.info(f"Tim thay {len(matches)} combo bang Regex.")
 
         # 2. GỌI BEAUTIFUL SOUP TỪ FILE KHÁC ĐỂ LẤY HÌNH ẢNH VÀ LINK CHUẨN
-        # image_link_map sẽ là: {title_key: {'image': image_url, 'link': product_link}, ...}
         image_link_map = extract_images_and_titles(page_source, url)
 
         # 3. KẾT HỢP VÀ XỬ LÝ DỮ LIỆU TỪ REGEX
@@ -117,16 +130,15 @@ def scrape_page(url):
                      except (ZeroDivisionError, TypeError):
                         discount = None
                 
-                # --- LẤY HÌNH ẢNH VÀ LINK GỐC (ĐÃ FIX) ---
+                # --- LẤY HÌNH ẢNH VÀ LINK GỐC ---
                 matched_image = None
                 matched_link = url 
                 
                 # Duyệt qua map để tìm đối chiếu
                 for image_title_key, item_data in image_link_map.items():
-                    # Kiểm tra xem tiêu đề Regex có là một phần của tiêu đề ALT không (hoặc ngược lại)
+                    # Kiểm tra xem tiêu đề Regex có là một phần của tiêu đề ALT không
                     if title_stripped in image_title_key or image_title_key in title_stripped:
                         matched_image = item_data.get('image')
-                        # Gán link chuẩn 100% (Link thực tế trích xuất từ BS)
                         if item_data.get('link'):
                             matched_link = item_data.get('link') 
                         break 
@@ -141,12 +153,13 @@ def scrape_page(url):
                     "link": matched_link, 
                 })
         
-        # 4. CƠ CHẾ FALLBACK (DỰ PHÒNG) QUAN TRỌNG
+        # 4. CƠ CHẾ FALLBACK (DỰ PHÒNG)
         # Nếu Regex trả về rỗng, ta lấy dữ liệu từ Image/Link Map
         if len(results) == 0 and len(image_link_map) > 0:
-            logging.warning("Regex không tìm thấy giá. Kích hoạt chế độ Fallback: Chỉ lấy Ảnh + Tiêu đề + Link.")
+            logging.warning("Regex khong tim thay gia. Kich hoat che do Fallback.")
             
             for title_key, item_data in image_link_map.items():
+                # Bỏ qua các title quá ngắn hoặc sai định dạng
                 if len(title_key) < 3 and not title_key.startswith("http"): continue 
 
                 results.append({
@@ -158,14 +171,12 @@ def scrape_page(url):
                     "link": item_data.get('link') if item_data.get('link') else url 
                 })
 
-        logging.info(f"Đã xử lý tổng cộng {len(results)} sản phẩm.")
+        logging.info(f"Da xu ly tong cong {len(results)} san pham.")
         return results
         
     except Exception as e:
-        logging.error(f"Lỗi trong quá trình scraping: {e}")
-        import traceback
-        logging.error(traceback.format_exc())
-        # Bắt lỗi Python và trả về JSON Error
+        logging.error(f"Loi scraping: {e}")
+        # Quan trọng: Không in traceback ra stdout, chỉ in JSON lỗi
         print(json.dumps({"error": f"Scraper Exception: {str(e)}"}))
         sys.exit(1)
         
@@ -175,6 +186,7 @@ def scrape_page(url):
 
 # --- MAIN EXECUTION BLOCK ---
 if __name__ == "__main__":
+    # Lấy URL từ tham số dòng lệnh
     input_url = sys.argv[1] if len(sys.argv) > 1 else ""
 
     if not input_url:
@@ -182,8 +194,10 @@ if __name__ == "__main__":
     else:
         try:
             data = scrape_page(input_url)
+            # Đây là dòng DUY NHẤT được phép in ra stdout
             print(json.dumps(data, ensure_ascii=False))
             
         except Exception as e:
-            # Nếu có lỗi xảy ra, in lỗi dạng JSON
+            # Nếu có lỗi ở tầng ngoài cùng, cũng trả về JSON
+            logging.error(f"Critical Error: {e}")
             print(json.dumps({"error": str(e)}))
