@@ -1,8 +1,10 @@
+# file: scraper.py
+
 # scraper.py - Scraper sử dụng Selenium và Regex để lấy danh sách sản phẩm
 import sys
 import io
 import json
-import re
+import re 
 import logging
 from urllib.parse import urlparse, urljoin
 from selenium import webdriver
@@ -57,10 +59,10 @@ def clean_price(text):
 def scrape_page(url):
     """
     Hàm scraping chính: Sử dụng Selenium + Regex (chính) và gọi scrape_beauti 
-    để lấy hình ảnh bổ sung. Có cơ chế Fallback nếu Regex thất bại.
+    để lấy hình ảnh và link chuẩn xác. 
     """
     logging.info(f"=" * 70)
-    logging.info(f"Starting Hybrid Scrape (Regex + Separate BS): {url}")
+    logging.info(f"Starting Hybrid Scrape (Regex for Price + BS for Image/Link): {url}")
     logging.info(f"=" * 70)
     
     driver = None
@@ -75,7 +77,7 @@ def scrape_page(url):
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
         
-        # Lấy toàn bộ HTML đã được kết xuất (Đầu vào cho BS)
+        # Lấy toàn bộ HTML đã được kết xuất
         page_source = driver.page_source 
         
         # Lấy nội dung văn bản thô cho Regex
@@ -92,8 +94,9 @@ def scrape_page(url):
 
         logging.info(f"Tìm thấy {len(matches)} combo khuyến mãi bằng Regex.")
 
-        # 2. GỌI BEAUTIFUL SOUP TỪ FILE KHÁC ĐỂ LẤY HÌNH ẢNH
-        image_map = extract_images_and_titles(page_source, url)
+        # 2. GỌI BEAUTIFUL SOUP TỪ FILE KHÁC ĐỂ LẤY HÌNH ẢNH VÀ LINK CHUẨN
+        # image_link_map sẽ là: {title_key: {'image': image_url, 'link': product_link}, ...}
+        image_link_map = extract_images_and_titles(page_source, url)
 
         # 3. KẾT HỢP VÀ XỬ LÝ DỮ LIỆU TỪ REGEX
         if matches:
@@ -114,40 +117,45 @@ def scrape_page(url):
                      except (ZeroDivisionError, TypeError):
                         discount = None
                 
-                # LẤY HÌNH ẢNH: ĐỐI CHIẾU LINH HOẠT
+                # --- LẤY HÌNH ẢNH VÀ LINK GỐC (ĐÃ FIX) ---
                 matched_image = None
+                matched_link = url 
                 
-                for image_title_key, image_url in image_map.items():
+                # Duyệt qua map để tìm đối chiếu
+                for image_title_key, item_data in image_link_map.items():
                     # Kiểm tra xem tiêu đề Regex có là một phần của tiêu đề ALT không (hoặc ngược lại)
                     if title_stripped in image_title_key or image_title_key in title_stripped:
-                        matched_image = image_url
-                        break
-                
+                        matched_image = item_data.get('image')
+                        # Gán link chuẩn 100% (Link thực tế trích xuất từ BS)
+                        if item_data.get('link'):
+                            matched_link = item_data.get('link') 
+                        break 
+
+                # Thêm sản phẩm đã có đủ thông tin
                 results.append({
                     "title": title_stripped,
                     "price_old": price_old,
                     "price_new": price_new,
                     "discount": discount,
                     "image": matched_image, 
-                    "link": url + "#" + title_stripped.replace(" ", "_")[:50], 
+                    "link": matched_link, 
                 })
         
         # 4. CƠ CHẾ FALLBACK (DỰ PHÒNG) QUAN TRỌNG
-        # Nếu Regex trả về rỗng (không tìm thấy giá), ta lấy dữ liệu từ Image Map
-        if len(results) == 0 and len(image_map) > 0:
-            logging.warning("Regex không tìm thấy giá. Kích hoạt chế độ Fallback: Chỉ lấy Ảnh + Tiêu đề.")
+        # Nếu Regex trả về rỗng, ta lấy dữ liệu từ Image/Link Map
+        if len(results) == 0 and len(image_link_map) > 0:
+            logging.warning("Regex không tìm thấy giá. Kích hoạt chế độ Fallback: Chỉ lấy Ảnh + Tiêu đề + Link.")
             
-            for title_key, image_url in image_map.items():
-                # Bỏ qua các ảnh quá nhỏ hoặc không có tiêu đề rõ ràng nếu cần
-                if len(title_key) < 3: continue 
+            for title_key, item_data in image_link_map.items():
+                if len(title_key) < 3 and not title_key.startswith("http"): continue 
 
                 results.append({
                     "title": title_key,
-                    "price_old": None,      # Đánh dấu là không có giá
-                    "price_new": None,      # Đánh dấu là không có giá
+                    "price_old": None,      
+                    "price_new": None,      
                     "discount": None,
-                    "image": image_url,
-                    "link": url
+                    "image": item_data.get('image'),
+                    "link": item_data.get('link') if item_data.get('link') else url 
                 })
 
         logging.info(f"Đã xử lý tổng cộng {len(results)} sản phẩm.")
@@ -157,29 +165,25 @@ def scrape_page(url):
         logging.error(f"Lỗi trong quá trình scraping: {e}")
         import traceback
         logging.error(traceback.format_exc())
-        raise
+        # Bắt lỗi Python và trả về JSON Error
+        print(json.dumps({"error": f"Scraper Exception: {str(e)}"}))
+        sys.exit(1)
         
     finally:
         if driver:
             driver.quit()
 
 # --- MAIN EXECUTION BLOCK ---
-# Phần này quan trọng: Nhận URL từ tham số và in ra JSON
 if __name__ == "__main__":
-    # Lấy URL từ tham số dòng lệnh (truyền từ PHP)
     input_url = sys.argv[1] if len(sys.argv) > 1 else ""
 
     if not input_url:
         print(json.dumps({"error": "No URL provided"}))
     else:
         try:
-            # Gọi hàm scrape
             data = scrape_page(input_url)
-            
-            # IN RA KẾT QUẢ JSON (Đây là thứ JS đang chờ)
-            # ensure_ascii=False để giữ nguyên tiếng Việt
             print(json.dumps(data, ensure_ascii=False))
             
         except Exception as e:
-            # In lỗi dạng JSON
+            # Nếu có lỗi xảy ra, in lỗi dạng JSON
             print(json.dumps({"error": str(e)}))
