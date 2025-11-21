@@ -1,4 +1,7 @@
 <?php
+header("Access-Control-Allow-Origin: http://nhom30.itimit.id.vn");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type");
 header('Content-Type: application/json; charset=utf-8');
 require_once "db.php";
 
