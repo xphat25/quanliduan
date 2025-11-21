@@ -55,7 +55,7 @@ window.addEventListener("message", function(e) {
                         Login
                     </li>
                     <li class="nav-item" onclick="window.location='auth/signup.php'" style="cursor:pointer;">
-                        Đăng ký
+                        Sign Up
                     </li>
                 <?php endif; ?>
             </ul>
