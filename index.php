@@ -12,18 +12,31 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-<script>
-window.addEventListener("message", function(e) {
-    if (e.data.action === "openCompare") {
 
-        // Bật tab Compare
+<script>
+// Nhận tín hiệu từ tab Scraper → bật tab Products + reload iframe
+window.addEventListener("message", function(e) {
+    if (e.data.action === "refreshProducts") {
+
+        // Đổi tab
+        document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+        document.querySelector(".nav-item[data-tab='tab-products']").classList.add("active");
+
+        document.querySelectorAll(".tab-page").forEach(page => page.classList.add("hidden"));
+        document.getElementById("tab-products").classList.remove("hidden");
+
+        // Reload iframe
+        const iframe = document.querySelector("#tab-products iframe");
+        iframe.src = iframe.src;
+    }
+
+    if (e.data.action === "openCompare") {
         document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
         document.querySelector(".nav-item[data-tab='tab-compare']").classList.add("active");
 
         document.querySelectorAll(".tab-page").forEach(page => page.classList.add("hidden"));
         document.getElementById("tab-compare").classList.remove("hidden");
 
-        // Load iframe Compare với danh sách ID
         document.querySelector("#tab-compare iframe").src =
             "pages/compare.php?ids=" + e.data.ids.join(",");
     }
@@ -45,105 +58,89 @@ window.addEventListener("message", function(e) {
                     <li class="nav-item active" data-tab="tab-scraper">Scraper</li>
                     <li class="nav-item" data-tab="tab-products">Products</li>
                     <li class="nav-item" data-tab="tab-compare">Compare</li>
-
-                    <li class="nav-item" onclick="window.location='auth/logout.php'" style="cursor:pointer;">
-                        Logout
-                    </li>
+                    <li class="nav-item" onclick="window.location='auth/logout.php'" style="cursor:pointer;">Logout</li>
                 <?php else: ?>
                     <li class="nav-item active" data-tab="tab-landing">Home</li>
-                    <li class="nav-item" onclick="window.location='auth/login.php'" style="cursor:pointer;">
-                        Login
-                    </li>
-                    <li class="nav-item" onclick="window.location='auth/signup.php'" style="cursor:pointer;">
-                        Sign Up
-                    </li>
+                    <li class="nav-item" onclick="window.location='auth/login.php'" style="cursor:pointer;">Login</li>
+                    <li class="nav-item" onclick="window.location='auth/signup.php'" style="cursor:pointer;">Sign Up</li>
                 <?php endif; ?>
             </ul>
         </nav>
+
     </div>
 </header>
 
 <main class="main-content">
 
-    <?php if (isset($_SESSION['user_logged_in'])): ?>
+<?php if (isset($_SESSION['user_logged_in'])): ?>
 
-        <section id="tab-scraper" class="tab-page">
+    <section id="tab-scraper" class="tab-page">
 
-            <div class="hero-section">
-                <h1 class="hero-title">E-commerce Data Scraper</h1>
-                <p class="hero-description">
-                    Enter a product category URL below to automatically extract product details, prices, and images.
-                </p>
-            </div>
+        <div class="hero-section">
+            <h1 class="hero-title">E-commerce Data Scraper</h1>
+            <p class="hero-description">
+                Enter a product category URL below to automatically extract product details.
+            </p>
+        </div>
 
-            <div class="input-section">
-                <div class="card">
-                    <div class="card-header">
-                        <h2 class="card-title">Target URL</h2>
-                    </div>
-                    <div class="card-content">
-                        <form id="scrapeForm" class="scrape-form">
-                            <div class="input-group">
-                                <input type="url" id="urlInput" placeholder="https://example.com/products..." required class="form-input">
-                                <button type="submit" id="scrapeBtn" class="btn btn-primary">
-                                    <span class="btn-text">Start Scraping</span>
-                                    <span class="spinner hidden"></span>
-                                </button>
-                            </div>
+        <div class="input-section">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Target URL</h2>
+                </div>
+                <div class="card-content">
+                    <form id="scrapeForm" class="scrape-form">
+                        <div class="input-group">
+                            <input type="url" id="urlInput" placeholder="https://example.com/products..." required class="form-input">
+                            <button type="submit" id="scrapeBtn" class="btn btn-primary">
+                                <span class="btn-text">Start Scraping</span>
+                                <span class="spinner hidden"></span>
+                            </button>
+                        </div>
 
-                            <a id="siteInfo" href="#" target="_blank" class="site-info hidden">
-                                <img id="siteFavicon" src="" alt="Logo" class="site-favicon">
-                                <span id="siteDomain" class="site-domain"></span>
-                            </a>
+                        <a id="siteInfo" href="#" target="_blank" class="site-info hidden">
+                            <img id="siteFavicon" src="" alt="Logo" class="site-favicon">
+                            <span id="siteDomain" class="site-domain"></span>
+                        </a>
 
-                            <p id="errorMessage" class="error-text hidden"></p>
-                        </form>
-                    </div>
+                        <p id="errorMessage" class="error-text hidden"></p>
+                    </form>
                 </div>
             </div>
+        </div>
 
-            <div id="resultsSection" class="results-section hidden">
-                <div class="results-header">
-                    <h2 class="results-title">Scraped Products</h2>
-                    <p class="results-count">Found <span id="countValue">0</span> items</p>
-                </div>
-                <div id="resultsList" class="product-grid"></div>
+        <div id="resultsSection" class="results-section hidden">
+            <div class="results-header">
+                <h2 class="results-title">Scraped Products</h2>
+                <p class="results-count">Found <span id="countValue">0</span> items</p>
             </div>
+            <div id="resultsList" class="product-grid"></div>
+        </div>
 
-        </section>
+    </section>
 
+    <section id="tab-products" class="tab-page hidden">
+        <h2>Saved Products</h2>
+        <iframe src="pages/products.php" class="iframe-page"></iframe>
+    </section>
 
-        <section id="tab-products" class="tab-page hidden">
-            <h2>Saved Products</h2>
-            <iframe src="pages/products.php" class="iframe-page"></iframe>
-        </section>
+    <section id="tab-compare" class="tab-page hidden">
+        <h2>Compare Products</h2>
+        <iframe src="pages/compare.php" class="iframe-page"></iframe>
+    </section>
 
+<?php else: ?>
 
-        <section id="tab-compare" class="tab-page hidden">
-            <h2>Compare Products</h2>
-            <iframe src="pages/compare.php" class="iframe-page"></iframe>
-        </section>
+    <section id="tab-landing" class="tab-page">
+        <div class="hero-section" style="margin-top: 100px;">
+            <h1 class="hero-title" style="color: var(--primary);">Welcome to E-commerce Data Tool</h1>
+            <p class="hero-description" style="font-size: 1.25rem; margin-bottom: 30px;">
+                Please Login or Sign Up to access the tools.
+            </p>
+        </div>
+    </section>
 
-    <?php else: ?>
-
-        <section id="tab-landing" class="tab-page">
-             <div class="hero-section" style="margin-top: 100px;">
-                <h1 class="hero-title" style="color: var(--primary);">Welcome to E-commerce Data Tool</h1>
-                <p class="hero-description" style="font-size: 1.25rem; margin-bottom: 30px;">
-                    Please Login or Sign Up to access the Web Scraper, Product Management, and Comparison tools.
-                </p>
-                <div style="display: flex; justify-content: center; gap: 20px;">
-                    <a href="auth/login.php" class="btn btn-primary" style="text-decoration: none; font-size: 1rem;">
-                        <span class="btn-text">Login Now</span>
-                    </a>
-                    <a href="auth/signup.php" class="btn" style="text-decoration: none; font-size: 1rem; background: #e5e7eb; color: var(--text-main);">
-                        <span class="btn-text">Sign Up for Free</span>
-                    </a>
-                </div>
-            </div>
-        </section>
-
-    <?php endif; ?>
+<?php endif; ?>
 
 </main>
 

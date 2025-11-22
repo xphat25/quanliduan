@@ -1,13 +1,13 @@
 <?php
 $host   = "localhost"; 
-$user   = "sql_nhom30_itimi";
-$pass   = "71bbaeb8a35948";
-$dbname = "sql_nhom30_itimi";
+$user   = "root";
+$pass   = "";
+$dbname = "thuthapdltm";
+$port   = 3307;
 
-$conn = new mysqli($host, $user, $pass, $dbname);
+$conn = new mysqli($host, $user, $pass, $dbname, $port);
 
 if ($conn->connect_error) {
-    // Trả về JSON lỗi để Frontend nhận biết
     die(json_encode([
         "status" => "error", 
         "message" => "Không thể kết nối đến Database Online: " . $conn->connect_error

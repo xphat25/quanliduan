@@ -15,10 +15,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const siteFavicon = document.getElementById('siteFavicon');
     const siteDomain = document.getElementById('siteDomain');
 
-
-    // ======================
-    // 1. Hiển thị favicon
-    // ======================
     urlInput.addEventListener('input', (e) => {
         const raw = e.target.value.trim();
 
@@ -30,7 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             let fullUrl = raw;
 
-            if (!/^https?:\/\//i.test(fullUrl)) fullUrl = "https://" + fullUrl;
+            if (!/^https?:\/\//i.test(fullUrl)) {
+                fullUrl = "https://" + fullUrl;
+            }
 
             const obj = new URL(fullUrl);
             const domain = obj.hostname;
@@ -40,22 +38,18 @@ document.addEventListener('DOMContentLoaded', () => {
             siteInfo.href = obj.origin;
 
             siteInfo.classList.remove('hidden');
+
         } catch {
             siteInfo.classList.add('hidden');
         }
     });
 
-
-    // ======================
-    // 2. Submit scrape request
-    // ======================
     scrapeForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
         const url = urlInput.value.trim();
         if (!url) return;
 
-        // Reset UI
         errorMessage.classList.add('hidden');
         resultsSection.classList.add('hidden');
         resultsList.innerHTML = '';
@@ -64,8 +58,10 @@ document.addEventListener('DOMContentLoaded', () => {
         setLoading(true);
 
         try {
-            // ⭐ FIX QUAN TRỌNG — DÙNG ĐƯỜNG DẪN TUYỆT ĐỐI ⭐
-            const response = await fetch(`https://nhom30.itimit.id.vn/duanqttt/api/api.php?url=${encodeURIComponent(url)}`);
+
+            const apiURL = `http://localhost/duanqttt/api/api.php?url=${encodeURIComponent(url)}`;
+
+            const response = await fetch(apiURL);
 
             if (!response.ok) {
                 throw new Error(`Connection Error: ${response.status} ${response.statusText}`);
@@ -77,13 +73,20 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 data = JSON.parse(raw);
             } catch (e) {
-                console.log("Backend raw:", raw);
+                console.log("❌ RAW backend:", raw);
                 throw new Error("Server returned invalid JSON");
             }
 
-            if (data.error) throw new Error(data.error);
+            if (data.error) {
+                throw new Error(data.error);
+            }
 
             displayResult(data);
+
+            // ⭐ TỰ ĐỘNG BẬT TAB PRODUCTS + LOAD DATA MỚI ⭐
+            setTimeout(() => {
+                window.postMessage({ action: "refreshProducts" }, "*");
+            }, 300);
 
         } catch (err) {
             errorMessage.textContent = err.message;
@@ -93,10 +96,6 @@ document.addEventListener('DOMContentLoaded', () => {
         setLoading(false);
     });
 
-
-    // ======================
-    // Loading UI
-    // ======================
     function setLoading(state) {
         if (state) {
             scrapeBtn.disabled = true;
@@ -111,10 +110,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-
-    // ======================
-    // Format VND
-    // ======================
     function formatCurrency(v) {
         if (!v) return "";
         return new Intl.NumberFormat("vi-VN", {
@@ -123,10 +118,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }).format(v);
     }
 
-
-    // ======================
-    // Render result grid
-    // ======================
     function displayResult(list) {
         resultsSection.classList.remove('hidden');
 
@@ -138,14 +129,13 @@ document.addEventListener('DOMContentLoaded', () => {
         countValue.textContent = list.length;
 
         if (list.length === 0) {
-            resultsList.innerHTML = `<p style="grid-column:1/-1;text-align:center;">No products found.</p>`;
+            resultsList.innerHTML = `<p style="grid-column:1/-1;text-align:center;">Không có sản phẩm nào.</p>`;
             return;
         }
 
         const html = list.map(item => `
             <div class="product-card">
                 <div class="product-image-container">
-                    ${item.discount ? `<span class="discount-tag">${item.discount}</span>` : ""}
                     <img src="${item.image || 'https://placehold.co/300x300'}"
                          class="product-image"
                          onerror="this.src='https://placehold.co/300x300?text=No+Image'">
@@ -160,7 +150,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
 
-                <a href="${item.link}" target="_blank" class="view-btn">View Product</a>
+                <a href="${item.link}" target="_blank" class="view-btn">
+                    View Product
+                </a>
             </div>
         `).join("");
 
